@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MedCase Agent — System Architecture</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #f8fafc;
+    color: #0f172a;
+    line-height: 1.6;
+  }
+  header {
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 28px 40px 20px;
+  }
+  header h1 { margin: 0 0 6px; font-size: 24px; font-weight: 600; color: #0f172a; }
+  header p.sub { margin: 0; color: #475569; font-size: 14px; }
+  .disclaimer {
+    margin-top: 14px; padding: 10px 14px; border-radius: 8px;
+    background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; font-size: 13px;
+  }
+  main { padding: 28px 40px 60px; max-width: 1240px; margin: 0 auto; }
+  section { margin-bottom: 40px; }
+  h2 { font-size: 18px; font-weight: 600; color: #0f172a; margin: 0 0 8px; }
+  h2 .tag { font-size: 12px; font-weight: 500; color: #64748b; }
+  .card {
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
+    padding: 0; overflow: hidden;
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0 0; font-size: 13px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; color: #334155; }
+  .swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,.15); }
+
+  /* Interactive diagram viewport */
+  .viewport {
+    position: relative;
+    width: 100%;
+    height: 620px;
+    background:
+      radial-gradient(circle, #e2e8f0 1px, transparent 1px) 0 0 / 22px 22px,
+      #ffffff;
+    cursor: grab;
+    overflow: hidden;
+  }
+  .viewport.er { height: 520px; }
+  .viewport.deploy { height: 360px; }
+  .viewport:active { cursor: grabbing; }
+  .viewport .mermaid { width: 100%; height: 100%; }
+  .viewport .mermaid svg { width: 100%; height: 100%; max-width: none !important; display: block; }
+
+  .toolbar {
+    position: absolute; top: 12px; right: 12px; z-index: 5;
+    display: flex; gap: 6px;
+    background: rgba(255,255,255,.92); border: 1px solid #e2e8f0;
+    border-radius: 10px; padding: 5px; backdrop-filter: blur(4px);
+  }
+  .toolbar button {
+    width: 34px; height: 34px; border: 1px solid #e2e8f0; background: #fff;
+    border-radius: 7px; cursor: pointer; font-size: 16px; line-height: 1; color: #334155;
+    display: flex; align-items: center; justify-content: center; transition: background .12s;
+  }
+  .toolbar button:hover { background: #f1f5f9; }
+  .toolbar button.wide { width: auto; padding: 0 12px; font-size: 13px; font-weight: 500; }
+  .hint {
+    position: absolute; bottom: 10px; left: 12px; z-index: 5;
+    font-size: 12px; color: #64748b; background: rgba(255,255,255,.9);
+    border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 10px;
+  }
+
+  footer { padding: 20px 40px 40px; color: #64748b; font-size: 12px; max-width: 1240px; margin: 0 auto; }
+  table.routes { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.routes th, table.routes td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #eef2f7; }
+  table.routes th { color: #64748b; font-weight: 600; }
+  .routes-wrap { padding: 20px; }
+  code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #0f172a; }
+</style>
+</head>
+<body>
+<header>
+  <h1>MedCase Agent — System Architecture</h1>
+  <p class="sub">Autonomous clinical reasoning tutor for medical students · Next.js + FastAPI + Gemini + MCP · Google for Startups AI Agents Challenge</p>
+  <div class="disclaimer">This tool is for medical education and simulated clinical reasoning practice only. It does not provide real patient diagnosis or treatment.</div>
+</header>
+
+<main>
+  <section>
+    <h2>System overview <span class="tag">— full request / agent / data flow</span></h2>
+    <div class="legend">
+      <span><span class="swatch" style="background:#faf5ff;border-color:#7c3aed"></span>Frontend (Next.js)</span>
+      <span><span class="swatch" style="background:#fef3c7;border-color:#d97706"></span>API gateway / routers</span>
+      <span><span class="swatch" style="background:#eff6ff;border-color:#2563eb"></span>AI agent mesh</span>
+      <span><span class="swatch" style="background:#fdf2f8;border-color:#db2777"></span>Gemini + MCP tools</span>
+      <span><span class="swatch" style="background:#fef2f2;border-color:#dc2626"></span>Fallback / safety</span>
+      <span><span class="swatch" style="background:#ecfdf5;border-color:#059669"></span>Data &amp; storage</span>
+    </div>
+    <div class="card">
+      <div class="viewport" id="vp-overview">
+        <div class="toolbar">
+          <button data-act="in" title="Zoom in">+</button>
+          <button data-act="out" title="Zoom out">&minus;</button>
+          <button data-act="reset" class="wide" title="Reset view">Fit</button>
+        </div>
+        <div class="hint">Scroll = zoom · drag = move · double-click = zoom in</div>
+        <pre class="mermaid">
+flowchart TD
+  classDef client fill:#faf5ff,stroke:#7c3aed,stroke-width:1.5px,color:#4c1d95;
+  classDef router fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#92400e;
+  classDef agent fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#1e40af;
+  classDef mcp fill:#fdf2f8,stroke:#db2777,stroke-width:1.5px,color:#9d174d;
+  classDef fallback fill:#fef2f2,stroke:#dc2626,stroke-width:1.5px,color:#991b1b;
+  classDef storage fill:#ecfdf5,stroke:#059669,stroke-width:1.5px,color:#065f46;
+
+  subgraph Client["Frontend — Next.js / React (lib/api.ts client)"]
+    direction LR
+    Home["Home /<br/>topic · difficulty · language"]:::client
+    Sim["Simulation /simulation<br/>RichFeedback · VoiceInput · Vitals panel"]:::client
+    Osce["OSCE /osce · /osce/exam<br/>StationTimer · VoiceInput"]:::client
+    Dash["Dashboard /dashboard<br/>PerformanceCharts (Chart.js)"]:::client
+    Summ["Summary /summary"]:::client
+  end
+
+  subgraph Gateway["Backend — FastAPI (main.py)"]
+    direction LR
+    Main["main.py gateway<br/>CORS · migrations · seed · /health /topics"]:::router
+    SessR["sessions.py<br/>start · answer · summary · resume"]:::router
+    StudR["students.py<br/>dashboard · weak-topics · sessions"]:::router
+    OsceR["osce.py<br/>start · answer · summary"]:::router
+  end
+
+  subgraph Mesh["AI agent mesh — app/agents"]
+    direction LR
+    CG["Case Generator"]:::agent
+    EX["Examiner (core)"]:::agent
+    AT["Adaptive Tutor"]:::agent
+    PT["Progress Tracker"]:::agent
+    SE["Patient State Engine<br/>vitals baselines"]:::agent
+  end
+
+  subgraph Intel["Reasoning — Gemini + MCP"]
+    direction LR
+    Gem["Gemini 3.5 Flash<br/>structured JSON · tool calls"]:::mcp
+    MCP["mcp_server.py — FastMCP"]:::mcp
+    TG["lookup_guideline<br/>7 guidelines"]:::mcp
+    TD["verify_drug_dosage<br/>7 drugs, weight-based"]:::mcp
+  end
+
+  subgraph Fallback["Safety &amp; fallback layer"]
+    direction LR
+    KWM["Rule-based keyword matcher<br/>(Gemini offline / bad schema)"]:::fallback
+    CHK["OSCE checklist scorer<br/>40% AI + 60% checklist"]:::fallback
+  end
+
+  subgraph Data["Data & storage"]
+    direction LR
+    Cases["Case templates<br/>demo_cases · extra_cases"]:::storage
+    OsceData["osce_stations<br/>3 sets x 4 stations"]:::storage
+    DB[("SQLite — medcase.db<br/>students · sessions · answers · weak_topics")]:::storage
+  end
+
+  Home --> SessR
+  Osce --> OsceR
+  Sim --> SessR
+  Dash --> StudR
+  Summ --> SessR
+
+  Main -. mounts .-> SessR
+  Main -. mounts .-> StudR
+  Main -. mounts .-> OsceR
+
+  SessR -->|get opening case| CG
+  CG -->|read weak topics| DB
+  CG -->|select/adapt template| Cases
+
+  SessR -->|evaluate answer| EX
+  SessR -->|baseline / format vitals| SE
+  EX -->|if GEMINI_API_KEY set| Gem
+  Gem -->|tool call| MCP
+  MCP --> TG
+  MCP --> TD
+  EX -->|on error / no key| KWM
+
+  OsceR -->|expert rating| EX
+  OsceR -->|objective score| CHK
+  OsceR --> OsceData
+
+  EX -->|difficulty + step control| AT
+  EX -->|persist results| PT
+  AT -->|end after 5 steps| SessR
+  PT -->|answers · score · weak topics| DB
+
+  DB --> StudR
+  DB --> Summ
+        </pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Database schema <span class="tag">— SQLite via SQLAlchemy ORM</span></h2>
+    <div class="card">
+      <div class="viewport er" id="vp-er">
+        <div class="toolbar">
+          <button data-act="in" title="Zoom in">+</button>
+          <button data-act="out" title="Zoom out">&minus;</button>
+          <button data-act="reset" class="wide" title="Reset view">Fit</button>
+        </div>
+        <div class="hint">Scroll = zoom · drag = move</div>
+        <pre class="mermaid">
+erDiagram
+  students {
+    text id PK
+    text name
+    text level
+    text created_at
+  }
+  sessions {
+    text id PK
+    text student_id FK
+    text topic
+    text difficulty
+    text case_id
+    text case_title
+    text status
+    text session_type
+    text vitals
+    integer current_step
+    text language
+    integer total_score
+    text created_at
+    text updated_at
+  }
+  answers {
+    text id PK
+    text session_id FK
+    integer step_number
+    text question
+    text student_answer
+    integer score
+    integer is_safe
+    text correct_points
+    text missing_points
+    text unsafe_points
+    text weak_topics
+    text feedback
+    text next_question
+    text created_at
+  }
+  weak_topics {
+    text id PK
+    text student_id FK
+    text topic
+    integer frequency
+    text last_seen
+  }
+  students ||--o{ sessions : "starts"
+  students ||--o{ weak_topics : "possesses"
+  sessions ||--o{ answers : "contains"
+        </pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>API surface <span class="tag">— FastAPI routes</span></h2>
+    <div class="card">
+      <div class="routes-wrap">
+      <table class="routes">
+        <thead><tr><th>Method</th><th>Route</th><th>Router</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>GET</td><td><code>/health</code></td><td>main</td><td>Service health check</td></tr>
+          <tr><td>GET</td><td><code>/topics</code></td><td>main</td><td>Available topics &amp; difficulties</td></tr>
+          <tr><td>POST</td><td><code>/session/start</code></td><td>sessions</td><td>Create session, generate opening case</td></tr>
+          <tr><td>POST</td><td><code>/session/{id}/answer</code></td><td>sessions</td><td>Evaluate answer, return feedback + next question + vitals</td></tr>
+          <tr><td>GET</td><td><code>/session/{id}/summary</code></td><td>sessions</td><td>Final score, strong/weak topics, recommendations</td></tr>
+          <tr><td>GET</td><td><code>/session/{id}/resume</code></td><td>sessions</td><td>Restore an interrupted active session</td></tr>
+          <tr><td>GET</td><td><code>/student/{id}/dashboard</code></td><td>students</td><td>Sessions + stats + weak topics in one call</td></tr>
+          <tr><td>GET</td><td><code>/student/{id}/weak-topics</code></td><td>students</td><td>Aggregated weak topics with frequency</td></tr>
+          <tr><td>GET</td><td><code>/student/{id}/sessions</code></td><td>students</td><td>Session history, newest first</td></tr>
+          <tr><td>POST/GET</td><td><code>/osce/*</code></td><td>osce</td><td>Timed OSCE station flow + blended scoring</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Deployment <span class="tag">— Google Cloud Run · us-central1 · LIVE</span></h2>
+    <div class="card">
+      <div class="viewport deploy" id="vp-deploy" style="height:440px;">
+        <div class="toolbar">
+          <button data-act="in" title="Zoom in">+</button>
+          <button data-act="out" title="Zoom out">&minus;</button>
+          <button data-act="reset" class="wide" title="Reset view">Fit</button>
+        </div>
+        <div class="hint">Scroll = zoom · drag = move</div>
+        <pre class="mermaid">
+flowchart LR
+  classDef ext fill:#f1f5f9,stroke:#64748b,color:#334155;
+  classDef gcp fill:#fef3c7,stroke:#d97706,color:#92400e;
+  classDef sec fill:#ecfdf5,stroke:#059669,color:#065f46;
+  classDef build fill:#eff6ff,stroke:#2563eb,color:#1e40af;
+
+  User["Student / judge<br/>browser"]:::ext
+
+  subgraph Pipeline["Cloud Build pipeline (.gcloudignore trims context)"]
+    direction TB
+    Src["Source<br/>backend/ · frontend/"]:::build
+    CB["gcloud builds submit<br/>Docker images → GCR"]:::build
+    Src --> CB
+  end
+
+  subgraph CR["Google Cloud Run — us-central1"]
+    direction TB
+    FE["medcase-frontend (Next.js)<br/>port 3000 · LIVE"]:::gcp
+    BE["medcase-backend (FastAPI + MCP)<br/>dynamic PORT · LIVE"]:::gcp
+  end
+
+  GemAPI["Google AI Studio<br/>Gemini API"]:::ext
+  SM["Secret Manager<br/>GEMINI_API_KEY (prod)"]:::sec
+  SQL["SQLite in-container (current)<br/>→ Cloud SQL Postgres (prod)"]:::sec
+
+  CB -->|deploy image| FE
+  CB -->|deploy image| BE
+  User -->|HTTPS| FE
+  FE -->|NEXT_PUBLIC_API_URL baked at build| BE
+  BE -->|reasoning calls| GemAPI
+  BE -.->|bind secret| SM
+  BE --> SQL
+        </pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Live endpoints <span class="tag">— deployed on Cloud Run</span></h2>
+    <div class="card">
+      <div class="routes-wrap">
+      <table class="routes">
+        <thead><tr><th>Service</th><th>URL</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Frontend (Next.js)</td><td><code>https://medcase-frontend-741852465920.us-central1.run.app</code></td><td>Live · port 3000</td></tr>
+          <tr><td>Backend API (FastAPI)</td><td><code>https://medcase-backend-741852465920.us-central1.run.app</code></td><td>Live · /health ok</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Generated from the live codebase (backend/app + frontend/app). Reasoning model: <code>gemini-3.5-flash</code> with MCP tools <code>lookup_guideline</code> and <code>verify_drug_dosage</code> passed directly into the Gemini tool config; rule-based keyword matcher is the offline fallback. Keep this diagram in sync with <code>Docs/ARCHITECTURE.md</code> on every structural change.
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+<script>
+  (async function () {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "base",
+      themeVariables: {
+        fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
+        fontSize: "14px",
+        lineColor: "#94a3b8",
+        primaryColor: "#ffffff",
+        primaryBorderColor: "#cbd5e1",
+        primaryTextColor: "#0f172a"
+      },
+      flowchart: { curve: "basis", nodeSpacing: 45, rankSpacing: 55, padding: 12 }
+    });
+
+    await mermaid.run({ querySelector: ".mermaid" });
+
+    document.querySelectorAll(".viewport").forEach(function (vp) {
+      var svg = vp.querySelector("svg");
+      if (!svg) return;
+      svg.removeAttribute("height");
+      svg.style.maxWidth = "none";
+
+      var pz = svgPanZoom(svg, {
+        zoomEnabled: true,
+        panEnabled: true,
+        controlIconsEnabled: false,
+        dblClickZoomEnabled: true,
+        mouseWheelZoomEnabled: true,
+        preventMouseEventsDefault: true,
+        fit: true,
+        center: true,
+        minZoom: 0.2,
+        maxZoom: 12,
+        zoomScaleSensitivity: 0.35
+      });
+
+      vp.querySelectorAll(".toolbar button").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var act = btn.getAttribute("data-act");
+          if (act === "in") pz.zoomIn();
+          else if (act === "out") pz.zoomOut();
+          else { pz.resize(); pz.fit(); pz.center(); }
+        });
+      });
+
+      window.addEventListener("resize", function () {
+        pz.resize(); pz.fit(); pz.center();
+      });
+    });
+  })();
+</script>
+</body>
+</html>

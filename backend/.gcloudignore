@@ -1,0 +1,19 @@
+# Ignore virtual environment
+venv/
+.venv/
+env/
+
+# Ignore Python cache
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Ignore local database and environment secrets
+*.db
+.env
+.env.local
+
+# Ignore git
+.git/
+.gitignore
