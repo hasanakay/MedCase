@@ -1,2 +1,3 @@
 FastAPI Backend API: https://medcase-backend-741852465920.us-central1.run.app
 Next.js Frontend (Kullanıcı Arayüzü): https://medcase-frontend-741852465920.us-central1.run.app
+Architecture Diagram (HTML): https://storage.googleapis.com/medapp-tip-public-assets/architecture-diagram.html
